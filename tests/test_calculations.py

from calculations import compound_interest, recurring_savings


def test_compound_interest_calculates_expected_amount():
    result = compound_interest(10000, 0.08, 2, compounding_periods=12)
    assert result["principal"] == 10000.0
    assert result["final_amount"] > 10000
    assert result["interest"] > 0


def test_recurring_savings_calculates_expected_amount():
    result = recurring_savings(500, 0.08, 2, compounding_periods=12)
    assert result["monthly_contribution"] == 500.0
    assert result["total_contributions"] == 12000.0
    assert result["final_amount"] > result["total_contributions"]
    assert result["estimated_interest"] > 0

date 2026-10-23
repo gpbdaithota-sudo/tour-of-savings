@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+import tkinter as tk
+from tkinter import ttk
+
+from auth import AuthFrame, ProfileSetupFrame
+from dashboard import DashboardPage
+from expense_tracker import ExpenseTrackerPage
+from goals import GoalsPage
+from scheme_data import SCHEMES
+from wallet_demo import WalletDemoPage
+
+
+class TourOfSavingsApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Tour of Savings")
+        self.geometry("1280x720")
+        self.minsize(980, 640)
+        self.current_user = None
+        self.configure(bg="#edf4fb")
+
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure("TFrame", background="#edf4fb")
+        style.configure("TLabel", background="#edf4fb", foreground="#1c2a39")
+        style.configure("Card.TFrame", background="#ffffff")
+        style.configure("Accent.TButton", background="#0d5cb6", foreground="#ffffff")
+        style.map("Accent.TButton", background=[("active", "#0b4c9a")])
+
+        self.auth_frame = None
+        self.main_content = ttk.Frame(self, padding=0)
+        self.main_content.pack(fill="both", expand=True)
+
+        self.show_auth_screen()
+
+    def show_auth_screen(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        self.auth_frame = AuthFrame(self.main_content, self)
+        self.auth_frame.pack(fill="both", expand=True)
+
+    def show_profile_setup(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        self.profile_frame = ProfileSetupFrame(self.main_content, self)
+        self.profile_frame.pack(fill="both", expand=True)
+
+    def get_recent_transactions(self, limit=5):
+        from database import get_transactions
+
+        if not self.current_user:
+            return []
+        txns = get_transactions(self.current_user["id"])[:limit]
+        return txns
+
+    def show_dashboard(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        dashboard = DashboardPage(self.main_content, self)
+        dashboard.pack(fill="both", expand=True)
+
+    def show_expense_tracker(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = ExpenseTrackerPage(self.main_content, self)
+        page.pack(fill="both", expand=True)
+
+    def show_goals(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = GoalsPage(self.main_content, self)
+        page.pack(fill="both", expand=True)
+
+    def show_wallet(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = WalletDemoPage(self.main_content, self)
+        page.pack(fill="both", expand=True)
+
+    def show_scheme_library(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = ttk.Frame(self.main_content, padding=20)
+        page.pack(fill="both", expand=True)
+        ttk.Label(page, text="Government Savings Scheme Library", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        for scheme in SCHEMES:
+            frame = ttk.LabelFrame(page, text=scheme["name"], padding=12)
+            frame.pack(fill="x", pady=8)
+            ttk.Label(frame, text=scheme["purpose"], wraplength=900).pack(anchor="w")
+            ttk.Label(frame, text=f"Eligibility: {scheme['eligibility']}", wraplength=900).pack(anchor="w", pady=(6, 0))
+            ttk.Label(frame, text=f"Deposits: {scheme['deposits']}", wraplength=900).pack(anchor="w")
+            ttk.Label(frame, text=f"Maturity: {scheme['maturity']}", wraplength=900).pack(anchor="w")
+            ttk.Label(frame, text=f"Rate note: {scheme['rate_note']}", wraplength=900).pack(anchor="w")
+            sources = ", ".join(f"{item['name']} ({item['last_verified']})" for item in scheme["official_sources"])
+            ttk.Label(frame, text=f"Sources: {sources}", wraplength=900).pack(anchor="w")
+
+    def show_investment_planner(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = ttk.Frame(self.main_content, padding=25)
+        page.pack(fill="both", expand=True)
+        ttk.Label(page, text="Investment Planner", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        ttk.Label(page, text="Use the calculator to compare one-time and recurring deposits before investing. Use official current rates and issue documents for final decisions.", wraplength=900).pack(anchor="w", pady=(8, 15))
+
+    def show_comparison_graphs(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = ttk.Frame(self.main_content, padding=25)
+        page.pack(fill="both", expand=True)
+        ttk.Label(page, text="Comparison Graphs", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        ttk.Label(page, text="This section compares estimated final values for sample savings products under consistent assumptions. Direct comparison may be misleading where product structure or liquidity differs.", wraplength=900).pack(anchor="w", pady=(8, 15))
+
+    def show_side_income(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = ttk.Frame(self.main_content, padding=25)
+        page.pack(fill="both", expand=True)
+        ttk.Label(page, text="Side-Income Ideas", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        ideas = [
+            "Tutoring: teach school subjects or math to younger students.",
+            "Coding projects: create simple websites, scripts, or automation tools.",
+            "Digital design: make posters, social media graphics or simple logos.",
+            "Skill development: practice speaking, writing and digital tools while building a portfolio.",
+        ]
+        for idea in ideas:
+            ttk.Label(page, text=f"• {idea}", wraplength=900).pack(anchor="w", pady=6)
+
+    def show_financial_education(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = ttk.Frame(self.main_content, padding=25)
+        page.pack(fill="both", expand=True)
+        ttk.Label(page, text="Financial Education", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        modules = [
+            "Compound interest: growth on both principal and previous interest.",
+            "Simple interest: interest calculated only on the principal amount.",
+            "Percentages: converts part-to-whole relationships into easy comparisons.",
+            "Inflation: rising prices reduce purchasing power over time.",
+            "Fixed vs floating rates: fixed rates stay constant while floating rates can change.",
+            "Goal planning: break big goals into monthly contributions and deadlines.",
+        ]
+        for module in modules:
+            ttk.Label(page, text=f"• {module}", wraplength=900).pack(anchor="w", pady=6)
+
+    def show_help(self):
+        for child in self.main_content.winfo_children():
+            child.destroy()
+        page = ttk.Frame(self.main_content, padding=25)
+        page.pack(fill="both", expand=True)
+        ttk.Label(page, text="Help & About", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        ttk.Label(page, text="Tour of Savings is an offline education app designed to help students understand savings, investments, goals and budgeting. Use it as a learning tool, not a financial adviser. Always verify current rates with official government and RBI information before choosing a product.", wraplength=900).pack(anchor="w", pady=(8, 15))
+
+    def logout(self):
+        self.current_user = None
+        self.show_auth_screen()
+
+
+if __name__ == "__main__":
+    from database import init_db
+
+    init_db()
+    app = TourOfSavingsApp()
+    app.mainloop()

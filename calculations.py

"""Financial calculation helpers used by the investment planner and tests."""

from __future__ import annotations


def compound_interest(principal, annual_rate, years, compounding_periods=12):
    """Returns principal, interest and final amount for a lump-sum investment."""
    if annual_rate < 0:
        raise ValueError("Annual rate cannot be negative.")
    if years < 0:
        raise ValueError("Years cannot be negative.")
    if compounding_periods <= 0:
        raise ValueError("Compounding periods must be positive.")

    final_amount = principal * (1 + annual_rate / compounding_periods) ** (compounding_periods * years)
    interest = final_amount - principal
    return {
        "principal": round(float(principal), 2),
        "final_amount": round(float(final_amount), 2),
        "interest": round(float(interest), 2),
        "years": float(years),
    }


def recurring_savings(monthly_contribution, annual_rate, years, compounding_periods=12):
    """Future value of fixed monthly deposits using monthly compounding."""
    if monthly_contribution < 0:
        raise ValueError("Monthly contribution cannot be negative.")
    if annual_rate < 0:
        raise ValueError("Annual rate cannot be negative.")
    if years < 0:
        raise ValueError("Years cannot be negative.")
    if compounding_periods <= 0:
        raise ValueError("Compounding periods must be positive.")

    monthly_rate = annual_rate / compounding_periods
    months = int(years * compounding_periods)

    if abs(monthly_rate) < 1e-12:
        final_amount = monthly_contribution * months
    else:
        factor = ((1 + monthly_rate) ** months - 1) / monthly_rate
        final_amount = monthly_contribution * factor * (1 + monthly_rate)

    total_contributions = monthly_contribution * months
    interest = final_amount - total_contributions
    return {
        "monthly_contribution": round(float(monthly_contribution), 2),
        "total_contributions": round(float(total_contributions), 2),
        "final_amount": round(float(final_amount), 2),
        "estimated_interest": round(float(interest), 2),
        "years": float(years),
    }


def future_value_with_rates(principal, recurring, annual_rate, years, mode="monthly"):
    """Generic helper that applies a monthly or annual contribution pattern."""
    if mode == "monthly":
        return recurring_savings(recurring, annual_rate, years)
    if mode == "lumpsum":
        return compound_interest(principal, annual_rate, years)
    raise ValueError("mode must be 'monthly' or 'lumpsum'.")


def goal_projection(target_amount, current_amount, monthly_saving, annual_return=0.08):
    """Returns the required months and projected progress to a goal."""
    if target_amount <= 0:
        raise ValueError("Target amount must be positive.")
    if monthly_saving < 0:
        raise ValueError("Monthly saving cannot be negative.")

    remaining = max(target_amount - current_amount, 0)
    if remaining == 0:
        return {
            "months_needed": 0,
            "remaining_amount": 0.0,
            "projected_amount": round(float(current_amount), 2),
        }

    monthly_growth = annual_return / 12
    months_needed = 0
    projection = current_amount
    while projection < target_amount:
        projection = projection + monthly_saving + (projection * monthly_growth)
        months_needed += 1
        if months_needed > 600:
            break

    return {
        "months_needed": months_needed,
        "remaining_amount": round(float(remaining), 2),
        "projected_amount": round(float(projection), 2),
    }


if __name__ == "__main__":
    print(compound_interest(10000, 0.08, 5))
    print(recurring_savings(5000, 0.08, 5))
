@@ -1,0 +1,281 @@
+import sqlite3
+from pathlib import Path
+from datetime import datetime
+
+DB_PATH = Path(__file__).resolve().parent / "tour_of_savings.db"
+
+
+def get_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = get_connection()
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            email TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL UNIQUE,
+            age INTEGER,
+            stream TEXT,
+            city TEXT,
+            monthly_income REAL DEFAULT 0,
+            monthly_expense REAL DEFAULT 0,
+            target_savings REAL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            target_amount REAL NOT NULL,
+            current_amount REAL NOT NULL DEFAULT 0,
+            target_date TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            transaction_type TEXT NOT NULL CHECK(transaction_type IN ('income','expense')),
+            category TEXT NOT NULL,
+            amount REAL NOT NULL,
+            description TEXT NOT NULL,
+            transaction_date TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS wallet_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            direction TEXT NOT NULL CHECK(direction IN ('credit','debit')),
+            label TEXT NOT NULL,
+            amount REAL NOT NULL,
+            description TEXT NOT NULL,
+            transaction_date TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def register_user(username, password_hash, full_name, email=None):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO users (username, password_hash, full_name, email) VALUES (?, ?, ?, ?)",
+            (username.strip(), password_hash, full_name.strip(), email.strip() if email else None),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_user_by_username(username):
+    conn = get_connection()
+    user = conn.execute(
+        "SELECT * FROM users WHERE username = ?",
+        (username.strip(),),
+    ).fetchone()
+    conn.close()
+    return dict(user) if user else None
+
+
+def get_user_by_id(user_id):
+    conn = get_connection()
+    user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    return dict(user) if user else None
+
+
+def update_user_profile(user_id, age=None, stream=None, city=None, monthly_income=None, monthly_expense=None, target_savings=None):
+    conn = get_connection()
+    try:
+        existing = conn.execute("SELECT id FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
+        if existing:
+            conn.execute(
+                """
+                UPDATE profiles
+                SET age = COALESCE(?, age),
+                    stream = COALESCE(?, stream),
+                    city = COALESCE(?, city),
+                    monthly_income = COALESCE(?, monthly_income),
+                    monthly_expense = COALESCE(?, monthly_expense),
+                    target_savings = COALESCE(?, target_savings)
+                WHERE user_id = ?
+                """,
+                (age, stream, city, monthly_income, monthly_expense, target_savings, user_id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO profiles (user_id, age, stream, city, monthly_income, monthly_expense, target_savings)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (user_id, age, stream, city, monthly_income, monthly_expense, target_savings),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_user_profile(user_id):
+    conn = get_connection()
+    profile = conn.execute("SELECT * FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+    return dict(profile) if profile else None
+
+
+def add_goal(user_id, name, target_amount, current_amount=0, target_date=None):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO goals (user_id, name, target_amount, current_amount, target_date) VALUES (?, ?, ?, ?, ?)",
+            (user_id, name, float(target_amount), float(current_amount), target_date),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def list_goals(user_id):
+    conn = get_connection()
+    goals = conn.execute(
+        "SELECT * FROM goals WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(goal) for goal in goals]
+
+
+def delete_goal(goal_id, user_id):
+    conn = get_connection()
+    try:
+        cursor = conn.execute("DELETE FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def update_goal(goal_id, user_id, name=None, target_amount=None, current_amount=None, target_date=None):
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE goals
+            SET name = COALESCE(?, name),
+                target_amount = COALESCE(?, target_amount),
+                current_amount = COALESCE(?, current_amount),
+                target_date = COALESCE(?, target_date)
+            WHERE id = ? AND user_id = ?
+            """,
+            (name, target_amount, current_amount, target_date, goal_id, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def add_transaction(user_id, transaction_type, category, amount, description, transaction_date):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO transactions (user_id, transaction_type, category, amount, description, transaction_date) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, transaction_type, category, float(amount), description, transaction_date),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_transactions(user_id):
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM transactions WHERE user_id = ? ORDER BY transaction_date DESC, id DESC",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def update_transaction(transaction_id, user_id, transaction_type=None, category=None, amount=None, description=None, transaction_date=None):
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE transactions
+            SET transaction_type = COALESCE(?, transaction_type),
+                category = COALESCE(?, category),
+                amount = COALESCE(?, amount),
+                description = COALESCE(?, description),
+                transaction_date = COALESCE(?, transaction_date)
+            WHERE id = ? AND user_id = ?
+            """,
+            (transaction_type, category, amount, description, transaction_date, transaction_id, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_transaction(transaction_id, user_id):
+    conn = get_connection()
+    try:
+        cursor = conn.execute("DELETE FROM transactions WHERE id = ? AND user_id = ?", (transaction_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def add_wallet_transaction(user_id, direction, label, amount, description, transaction_date=None):
+    if transaction_date is None:
+        transaction_date = datetime.today().strftime("%Y-%m-%d")
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO wallet_transactions (user_id, direction, label, amount, description, transaction_date) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, direction, label, float(amount), description, transaction_date),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_wallet_transactions(user_id):
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM wallet_transactions WHERE user_id = ? ORDER BY transaction_date DESC, id DESC",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+if __name__ == "__main__":
+    init_db()
+    print(f"Database ready: {DB_PATH}")

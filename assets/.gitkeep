@@ -1,0 +1,27 @@
+from database import init_db, register_user, get_user_by_username, add_goal, get_transactions, add_transaction
+
+
+def test_database_initializes_and_registers_user():
+    init_db()
+    user_id = register_user("demo_user", "hashed_password", "Demo User", "demo@example.com")
+    assert user_id is not None
+    user = get_user_by_username("demo_user")
+    assert user is not None
+    assert user["full_name"] == "Demo User"
+
+
+def test_goal_and_transaction_insertion_works():
+    init_db()
+    user_id = register_user("finance_demo", "hash2", "Finance Demo", "finance@example.com")
+    add_goal(user_id, "Bike", 50000, 15000, "2026-12-31")
+    add_transaction(user_id, "income", "Salary", 20000, "Monthly salary", "2026-10-01")
+    add_transaction(user_id, "expense", "Food", 4000, "Groceries", "2026-10-05")
+
+    txns = get_transactions(user_id)
+    assert len(txns) == 2
+    assert sum(item["amount"] for item in txns if item["transaction_type"] == "income") == 20000.0
+
+
+if __name__ == "__main__":
+    test_database_initializes_and_registers_user()
+    test_goal_and_transaction_insertion_works()

@@ -1,0 +1,94 @@
+"""Goal-tracking page for Tour of Savings."""
+
+from __future__ import annotations
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+from calculations import goal_projection
+from database import add_goal, list_goals, delete_goal, update_goal
+
+
+class GoalsPage(ttk.Frame):
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.build()
+
+    def build(self):
+        container = ttk.Frame(self, padding=20)
+        container.pack(fill="both", expand=True)
+
+        left = ttk.Frame(container)
+        left.pack(side="left", fill="y", padx=(0, 20))
+
+        form = ttk.LabelFrame(left, text="Add or update goal")
+        form.pack(fill="x", padx=10, pady=10)
+
+        self.goal_name = ttk.Entry(form)
+        self.goal_name.insert(0, "Goal name")
+        self.goal_name.pack(fill="x", padx=10, pady=5)
+
+        self.goal_amount = ttk.Entry(form)
+        self.goal_amount.insert(0, "Target amount")
+        self.goal_amount.pack(fill="x", padx=10, pady=5)
+
+        self.goal_saved = ttk.Entry(form)
+        self.goal_saved.insert(0, "Saved amount")
+        self.goal_saved.pack(fill="x", padx=10, pady=5)
+
+        self.goal_date = ttk.Entry(form)
+        self.goal_date.insert(0, "Target date (YYYY-MM-DD)")
+        self.goal_date.pack(fill="x", padx=10, pady=5)
+
+        ttk.Button(form, text="Save Goal", command=self.save_goal).pack(fill="x", padx=10, pady=8)
+
+        right = ttk.Frame(container)
+        right.pack(side="left", fill="both", expand=True)
+        list_label = ttk.LabelFrame(right, text="My goals")
+        list_label.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.goal_list = ttk.Frame(list_label)
+        self.goal_list.pack(fill="both", expand=True, padx=10, pady=10)
+        self.render_goals()
+
+    def save_goal(self):
+        name = self.goal_name.get().strip()
+        amount = self.goal_amount.get().strip()
+        saved = self.goal_saved.get().strip()
+        target_date = self.goal_date.get().strip()
+
+        if not name or not amount:
+            messagebox.showerror("Goal error", "Goal name and target amount are required.")
+            return
+
+        add_goal(self.app.current_user["id"], name, float(amount), float(saved or 0), target_date or None)
+        self.goal_name.delete(0, tk.END)
+        self.goal_amount.delete(0, tk.END)
+        self.goal_saved.delete(0, tk.END)
+        self.goal_date.delete(0, tk.END)
+        self.render_goals()
+
+    def render_goals(self):
+        for child in self.goal_list.winfo_children():
+            child.destroy()
+
+        goals = list_goals(self.app.current_user["id"])
+        if not goals:
+            ttk.Label(self.goal_list, text="No goals added yet.").pack(pady=20)
+            return
+
+        for goal in goals:
+            frame = ttk.Frame(self.goal_list, padding=8)
+            frame.pack(fill="x", padx=4, pady=4)
+            ttk.Label(frame, text=f"{goal['name']}   ₹{float(goal['current_amount']):,.2f} / ₹{float(goal['target_amount']):,.2f}", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+            progress = min(float(goal["current_amount"]) / max(float(goal["target_amount"]), 1), 1.0)
+            bar = ttk.Progressbar(frame, maximum=1, value=progress)
+            bar.pack(fill="x", pady=(5, 5))
+            projection = goal_projection(float(goal["target_amount"]), float(goal["current_amount"]), 1000)
+            ttk.Label(frame, text=f"Target date: {goal.get('target_date') or 'Not set'} | Estimated months remaining: {projection['months_needed']}").pack(anchor="w")
+            ttk.Button(frame, text="Delete", command=lambda gid=goal['id']: self.delete_goal(gid)).pack(anchor="e")
+
+    def delete_goal(self, goal_id):
+        delete_goal(goal_id, self.app.current_user["id"])
+        self.render_goals()

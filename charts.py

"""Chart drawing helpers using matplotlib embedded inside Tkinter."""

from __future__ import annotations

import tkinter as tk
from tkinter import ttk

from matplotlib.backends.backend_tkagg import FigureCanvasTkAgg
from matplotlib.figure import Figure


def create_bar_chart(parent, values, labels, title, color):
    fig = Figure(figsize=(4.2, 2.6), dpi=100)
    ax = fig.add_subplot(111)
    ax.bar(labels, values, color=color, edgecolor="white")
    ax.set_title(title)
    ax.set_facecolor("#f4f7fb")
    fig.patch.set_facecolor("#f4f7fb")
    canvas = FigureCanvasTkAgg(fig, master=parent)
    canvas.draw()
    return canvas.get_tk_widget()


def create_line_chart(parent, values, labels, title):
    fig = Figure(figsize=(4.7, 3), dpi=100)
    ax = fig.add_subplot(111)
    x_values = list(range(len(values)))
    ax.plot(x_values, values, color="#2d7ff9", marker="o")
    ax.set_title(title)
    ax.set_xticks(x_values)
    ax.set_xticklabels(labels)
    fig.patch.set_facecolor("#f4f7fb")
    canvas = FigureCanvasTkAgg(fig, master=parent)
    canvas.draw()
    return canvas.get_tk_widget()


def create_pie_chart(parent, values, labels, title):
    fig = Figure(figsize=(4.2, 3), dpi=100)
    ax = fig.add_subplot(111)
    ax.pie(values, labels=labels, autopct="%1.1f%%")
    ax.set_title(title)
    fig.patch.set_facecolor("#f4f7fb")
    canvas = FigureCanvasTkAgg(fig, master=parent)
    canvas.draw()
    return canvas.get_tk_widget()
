@@ -1,0 +1,91 @@
+"""Dashboard page and summary calculations for the Tour of Savings app."""
+
+from __future__ import annotations
+
+import tkinter as tk
+from tkinter import ttk
+
+from charts import create_bar_chart, create_line_chart
+from database import get_transactions, get_user_profile, list_goals
+from ui_components import info_card
+
+
+class DashboardPage(ttk.Frame):
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.build()
+
+    def build(self):
+        scroll = tk.Canvas(self, bg="#f5f8fc")
+        scroll.pack(side="left", fill="both", expand=True)
+        inner = ttk.Frame(scroll)
+        scroll.create_window((0, 0), window=inner, anchor="nw")
+
+        summary = self.get_summary()
+        cards = ttk.Frame(inner)
+        cards.pack(fill="x", padx=16, pady=16)
+
+        cards.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        info_card(cards, "Balance", f"₹{summary['balance']:,.2f}", 0, 0)
+        info_card(cards, "Total Saved", f"₹{summary['total_saved']:,.2f}", 0, 1)
+        info_card(cards, "Total Expenses", f"₹{summary['total_expenses']:,.2f}", 0, 2)
+        info_card(cards, "Monthly Income", f"₹{summary['monthly_income']:,.2f}", 0, 3)
+
+        chart_frame = ttk.Frame(inner)
+        chart_frame.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+
+        monthly_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        monthly_income = summary["monthly_income_values"]
+        monthly_expenses = summary["monthly_expense_values"]
+
+        self.income_chart = create_bar_chart(chart_frame, monthly_income, monthly_labels, "Monthly income", "#2d7ff9")
+        self.income_chart.pack(side="left", fill="both", expand=True)
+        self.expense_chart = create_bar_chart(chart_frame, monthly_expenses, monthly_labels, "Monthly expenses", "#f4b942")
+        self.expense_chart.pack(side="right", fill="both", expand=True)
+
+        line_frame = ttk.Frame(inner)
+        line_frame.pack(fill="both", expand=True, padx=16, pady=(0, 10))
+        self.line_chart = create_line_chart(line_frame, summary["goal_progress"], ["Savings goal", "Net balance"], "Goal progress")
+        self.line_chart.pack(fill="both", expand=True)
+
+        recent = ttk.LabelFrame(inner, text="Recent Transactions")
+        recent.pack(fill="both", expand=True, padx=16, pady=(0, 20))
+        data = self.app.get_recent_transactions(limit=5)
+        if data:
+            for item in data:
+                row = ttk.Frame(recent)
+                row.pack(fill="x", padx=10, pady=4)
+                ttk.Label(row, text=f"{item['transaction_date']}   {item['category']}", width=30, anchor="w").pack(side="left")
+                ttk.Label(row, text=item["description"], width=35, anchor="w").pack(side="left")
+                ttk.Label(row, text=f"₹{float(item['amount']):,.2f}", width=15, anchor="e").pack(side="right")
+        else:
+            ttk.Label(recent, text="No transactions yet. Start by adding one.", padding=10).pack()
+
+    def get_summary(self):
+        user_id = self.app.current_user["id"]
+        profile = get_user_profile(user_id) or {}
+        monthly_income = float(profile.get("monthly_income", 0) or 0)
+        monthly_expense = float(profile.get("monthly_expense", 0) or 0)
+        goals = list_goals(user_id)
+        total_saved = sum(float(goal.get("current_amount", 0) or 0) for goal in goals)
+
+        transactions = get_transactions(user_id)
+        income = sum(float(item["amount"]) for item in transactions if item["transaction_type"] == "income")
+        expenses = sum(float(item["amount"]) for item in transactions if item["transaction_type"] == "expense")
+
+        balance = income - expenses + total_saved
+        month_values = [max(0.0, float((monthly_income / 12) * (i + 1))) for i in range(12)]
+        expense_values = [max(0.0, float((monthly_expense / 12) * (i + 1))) for i in range(12)]
+        goal_progress = [current_amount for current_amount in [float(goal.get("current_amount", 0) or 0) for goal in goals]] or [0]
+
+        return {
+            "balance": balance,
+            "total_saved": total_saved,
+            "total_expenses": expenses,
+            "monthly_income": monthly_income,
+            "monthly_expense": monthly_expense,
+            "monthly_income_values": month_values,
+            "monthly_expense_values": expense_values,
+            "goal_progress": goal_progress,
+        }

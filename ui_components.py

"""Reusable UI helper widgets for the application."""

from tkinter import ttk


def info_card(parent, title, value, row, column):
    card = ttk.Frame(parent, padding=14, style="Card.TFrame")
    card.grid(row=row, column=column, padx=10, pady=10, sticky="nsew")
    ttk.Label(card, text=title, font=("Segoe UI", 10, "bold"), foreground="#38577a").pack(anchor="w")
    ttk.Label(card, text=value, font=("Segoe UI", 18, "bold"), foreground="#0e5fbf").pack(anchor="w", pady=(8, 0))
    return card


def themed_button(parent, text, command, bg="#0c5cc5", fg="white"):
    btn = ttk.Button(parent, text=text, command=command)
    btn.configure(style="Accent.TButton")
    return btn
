@@ -1,0 +1,53 @@
+"""Simulated wallet screen with clear educational warnings."""
+
+from __future__ import annotations
+
+from tkinter import ttk
+
+from database import get_wallet_transactions
+
+
+class WalletDemoPage(ttk.Frame):
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.build()
+
+    def build(self):
+        container = ttk.Frame(self, padding=20)
+        container.pack(fill="both", expand=True)
+
+        title = ttk.Label(container, text="SIMULATED WALLET", font=("Segoe UI", 22, "bold"))
+        title.pack(anchor="w")
+
+        warning = ttk.Label(container, text="This wallet is educational only. It does not connect to banks, UPI, wallets or payment networks.", foreground="#5f6c7b")
+        warning.pack(anchor="w", pady=(5, 15))
+
+        total = self.calculate_balance()
+        balance = ttk.Label(container, text=f"Current simulated balance: ₹{total:,.2f}", font=("Segoe UI", 18, "bold"), foreground="#0e5fbf")
+        balance.pack(anchor="w")
+
+        history = ttk.LabelFrame(container, text="Simulated transactions")
+        history.pack(fill="both", expand=True, pady=15)
+
+        rows = get_wallet_transactions(self.app.current_user["id"])
+        if not rows:
+            ttk.Label(history, text="No wallet transactions yet. This is a demo wallet for learning.").pack(padx=10, pady=10)
+            return
+
+        for item in rows:
+            entry = ttk.Frame(history)
+            entry.pack(fill="x", padx=10, pady=4)
+            ttk.Label(entry, text=item["label"], width=20).pack(side="left")
+            ttk.Label(entry, text=item["description"], width=40).pack(side="left")
+            ttk.Label(entry, text=f"₹{float(item['amount']):,.2f}", width=16, anchor="e").pack(side="right")
+
+    def calculate_balance(self):
+        rows = get_wallet_transactions(self.app.current_user["id"])
+        total = 0.0
+        for row in rows:
+            if row["direction"] == "credit":
+                total += float(row["amount"])
+            else:
+                total -= float(row["amount"])
+        return total
